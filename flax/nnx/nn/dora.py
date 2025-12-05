@@ -82,41 +82,36 @@ class DoRA(Module):
             dtype=self.dtype
         )
         lora_update = lora_a @ lora_b
-    
-        if self.base_module is not None:
-            if not callable(self.base_module):
-                raise ValueError('`self.base_module` must be callable.')
-            
-            if hasattr(self.base_module, 'kernel'):
-                base_weight = self.base_module.kernel.value
-                base_weight = jnp.asarray(base_weight, dtype=self.dtype)
-            else:
-                raise ValueError('`self.base_module` must have a `kernel` attribute.')
-            
-            weight_norm = jnp.linalg.norm(base_weight, axis=0, keepdims=True)
-            weight_norm = jnp.maximum(weight_norm, self.eps)  
-            directional_base = base_weight / weight_norm
-            
-            scaled_base = magnitude * directional_base
-            
-            adapted_weight = scaled_base + lora_update
-        else:
-            weight_norm = jnp.linalg.norm(lora_update, axis=0, keepdims=True)
-            weight_norm = jnp.maximum(weight_norm, self.eps)  
-            directional_update = lora_update / weight_norm
-            adapted_weight = magnitude * directional_update
-    
+        
+        if self.base_module is None:
+            raise ValueError("DoRA requires `base_module` to be provided.")
+        
+        if not callable(self.base_module):
+            raise ValueError('`self.base_module` must be callable.')
+        
+        if not hasattr(self.base_module, 'kernel'):
+            raise ValueError('`self.base_module` must have a `kernel` attribute.')
+        
+        base_weight = self.base_module.kernel.value
+        base_weight = jnp.asarray(base_weight, dtype=self.dtype)
+        
+        # DoRA: decompose base weight into magnitude and direction
+        weight_norm = jnp.linalg.norm(base_weight, axis=0, keepdims=True)
+        weight_norm = jnp.maximum(weight_norm, self.eps)  
+        directional_base = base_weight / weight_norm
+        scaled_base = magnitude * directional_base
+        adapted_weight = scaled_base + lora_update
+        
         out = x @ adapted_weight
-    
-        if self.base_module is not None and hasattr(self.base_module, 'bias'):
-            if self.base_module.bias is not None:
-                bias = jnp.asarray(self.base_module.bias.value, dtype=self.dtype)
-                out += bias
-    
+        
+        if hasattr(self.base_module, 'bias') and self.base_module.bias is not None:
+            bias = jnp.asarray(self.base_module.bias.value, dtype=self.dtype)
+            out += bias
+        
         return out
 
 
-class DoRALinear(Linear):
+    class DoRALinear(Linear):
     def __init__(
         self,
         in_features: int,
