@@ -81,9 +81,8 @@ class DoRA(Module):
             (x, self.lora_a[...], self.lora_b[...], self.magnitude[...]), 
             dtype=self.dtype
         )
-
         lora_update = lora_a @ lora_b
-
+    
         if self.base_module is not None:
             if not callable(self.base_module):
                 raise ValueError('`self.base_module` must be callable.')
@@ -94,22 +93,26 @@ class DoRA(Module):
             else:
                 raise ValueError('`self.base_module` must have a `kernel` attribute.')
             
-            combined_weight = base_weight + lora_update
+            weight_norm = jnp.linalg.norm(base_weight, axis=0, keepdims=True)
+            weight_norm = jnp.maximum(weight_norm, self.eps)  
+            directional_base = base_weight / weight_norm
+            
+            scaled_base = magnitude * directional_base
+            
+            adapted_weight = scaled_base + lora_update
         else:
-            combined_weight = lora_update
-
-        weight_norm = jnp.linalg.norm(combined_weight, axis=0, keepdims=True)
-        weight_norm = jnp.maximum(weight_norm, self.eps)  
-        directional_weight = combined_weight / weight_norm
-        adapted_weight = magnitude * directional_weight
-
+            weight_norm = jnp.linalg.norm(lora_update, axis=0, keepdims=True)
+            weight_norm = jnp.maximum(weight_norm, self.eps)  
+            directional_update = lora_update / weight_norm
+            adapted_weight = magnitude * directional_update
+    
         out = x @ adapted_weight
-
+    
         if self.base_module is not None and hasattr(self.base_module, 'bias'):
             if self.base_module.bias is not None:
                 bias = jnp.asarray(self.base_module.bias.value, dtype=self.dtype)
                 out += bias
-
+    
         return out
 
 
