@@ -155,5 +155,5 @@ class DoRALinear(Linear):
             eps=eps,
         )
 
-        def __call__(self, x: jax.Array):
-            return self.dora(x)
+    def __call__(self, x: jax.Array):
+        return self.dora(x)
